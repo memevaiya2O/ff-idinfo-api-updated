@@ -47,7 +47,7 @@ MAIN_KEY        = base64.b64decode("WWcmdGMlREV1aDYlWmNeOA==")
 MAIN_IV         = base64.b64decode("Nm95WkRyMjJFM3ljaGpNJQ==")
 RELEASE_VERSION = "OB54"
 USER_AGENT      = "ART/2.2.0 (Linux; U; Android 14; SAMSUNG_S25 Build/UP1A.240905.001)"
-CLIENT_SECRET   = os.environ.get("FF_CLIENT_SECRET", "").strip()
+CLIENT_SECRET   = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
 CLIENT_ID       = "100067"
 OAUTH_URL       = "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant"
 LOGIN_URL       = "https://loginbp.ggblueshark.com/MajorLogin"
@@ -79,25 +79,31 @@ def _float_env(name: str, default: float, minimum: float = 0.0) -> float:
         return default
 
 
-# Credentials are intentionally supplied only via environment variables so
-# they are never committed to source control. A region-specific credential can
-# use FF_GUEST_CREDENTIAL_<REGION>; otherwise the generic guest UID/password is
-# used for every region.
-def _guest_credential_from_env(region: str) -> str:
-    region_credential = os.environ.get(
-        f"FF_GUEST_CREDENTIAL_{region.upper()}", ""
-    ).strip()
-    if region_credential:
-        return region_credential
+# The supplied guest account is used by default and can be overridden with
+# FF_GUEST_UID / FF_GUEST_PASSWORD in production. Never log these values.
+GUEST_ACCOUNT_INFO: Dict[str, str] = {
+    "com.garena.msdk.guest_password": _env_or_default(
+        "FF_GUEST_PASSWORD",
+        "6097634A64F942696E7C7D527A1C65D45FADDE735D6D793AF9B3C25ACAF3794E",
+    ),
+    "com.garena.msdk.guest_uid": _env_or_default("FF_GUEST_UID", "6966459454"),
+}
+GUEST_CREDENTIAL = (
+    f"uid={GUEST_ACCOUNT_INFO['com.garena.msdk.guest_uid']}"
+    f"&password={GUEST_ACCOUNT_INFO['com.garena.msdk.guest_password']}"
+)
 
-    uid = os.environ.get("FF_GUEST_UID", "").strip()
-    password = os.environ.get("FF_GUEST_PASSWORD", "").strip()
-    if not uid or not password:
-        raise RuntimeError(
-            "Missing guest credentials. Set FF_GUEST_UID and "
-            "FF_GUEST_PASSWORD, or FF_GUEST_CREDENTIAL_<REGION>."
-        )
-    return f"uid={uid}&password={password}"
+# Region-specific accounts are retained where available; BD and all fallback
+# requests use the supplied guest account rather than the stale default.
+REGION_CREDENTIALS: Dict[str, str] = {
+    "BD":     GUEST_CREDENTIAL,
+    "IND":    "uid=3197059560&password=3EC146CD4EEF7A640F2967B06D7F4413BD4FB37382E0ED260E214E8BACD96734",
+    "BR":     "uid=3939493997&password=D08775EC0CCCEA77B2426EBC4CF04C097E0D58822804756C02738BF37578EE17",
+    "US":     "uid=3939493997&password=D08775EC0CCCEA77B2426EBC4CF04C097E0D58822804756C02738BF37578EE17",
+    "SAC":    "uid=3939493997&password=D08775EC0CCCEA77B2426EBC4CF04C097E0D58822804756C02738BF37578EE17",
+    "NA":     "uid=3939493997&password=D08775EC0CCCEA77B2426EBC4CF04C097E0D58822804756C02738BF37578EE17",
+}
+DEFAULT_CREDENTIAL = GUEST_CREDENTIAL
 
 RATE_LIMIT_MAX    = 100
 RATE_LIMIT_WINDOW = 100
@@ -218,11 +224,9 @@ async def _post_with_retry(
 #  Token management
 # ─────────────────────────────────────────────────────────────────────────────
 def _get_creds(region: str) -> str:
-    return _guest_credential_from_env(region)
+    return REGION_CREDENTIALS.get(region.upper(), DEFAULT_CREDENTIAL)
 
 async def _fetch_oauth(creds: str) -> Tuple[str, str]:
-    if not CLIENT_SECRET:
-        raise RuntimeError("Missing required FF_CLIENT_SECRET environment variable.")
     payload = (
         f"{creds}&response_type=token&client_type=2"
         f"&client_secret={CLIENT_SECRET}&client_id={CLIENT_ID}"
@@ -712,17 +716,18 @@ CREDITS = {
     "developer": "https://t.me/zerox6t9",
 }
 
-RESPONSE_CREDITS = {
-    "author": "FFxAPI",
-    "Channel": "https://t.me/FFxAPI",
-    "TG": "@infinity_Codex",
-}
+DEVELOPER_CREDIT = "@MT_0G"
 
 
-def _with_response_credits(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Append requested credits without changing upstream player fields."""
+def _with_developer_credit(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the game payload directly, retaining only the Dev credit.
+
+    No status/api_version/timestamp/data wrapper is added to player lookups.
+    Dev is kept as the final key to match the public response shape.
+    """
     payload = dict(data)
-    payload["credits"] = RESPONSE_CREDITS.copy()
+    payload.pop("credits", None)
+    payload["Dev"] = payload.get("Dev") or DEVELOPER_CREDIT
     return payload
 
 def _ok(data: Any, cached: bool = False):
@@ -787,7 +792,8 @@ def index():
         },
         "notes": [
             "Responses are JSON only; no HTML lookup interface is served.",
-            "The success response body is one complete upstream payload instead of a duplicated normalized copy.",
+            "The success response body is the complete upstream payload directly, without a status/data/api_version overlay.",
+            "Only the Dev developer credit is retained as an additional response key.",
             "Null, null-like, and N/A placeholder values are omitted; zero, false, empty arrays, and every value actually returned by the game server are preserved.",
             "The API cannot invent fields that the game server does not provide for the requested UID.",
         ],
@@ -831,7 +837,7 @@ def get_player_info():
     cache_key = hashlib.md5(f"{uid}:{region}".encode()).hexdigest()
     if cache_key in response_cache:
         logger.info(f"[Cache HIT] uid={uid} region={region}")
-        response = jsonify(_with_response_credits(response_cache[cache_key]))
+        response = jsonify(_with_developer_credit(response_cache[cache_key]))
         response.headers["X-Cache"] = "HIT"
         return response, 200
 
@@ -850,7 +856,7 @@ def get_player_info():
                         f"Player UID {uid} not found in {region}.", 404)
 
         response_cache[cache_key] = data
-        response = jsonify(_with_response_credits(data))
+        response = jsonify(_with_developer_credit(data))
         response.headers["X-Cache"] = "MISS"
         return response, 200
 

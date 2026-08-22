@@ -46,7 +46,7 @@ If the upstream game service is temporarily busy, the API retries transient requ
 
 ## 📦 Player Info Output Fields
 
-The API returns JSON only. A successful `/player-info` response is the complete upstream player payload itself, without a `data` wrapper, normalization, renaming, omission, or duplication. This includes sections such as `basicInfo`, `profileInfo`, `clanBasicInfo`, `captainBasicInfo`, `petInfo`, `socialInfo`, `diamondCostRes`, `creditScoreInfo`, `news`, `historyEpInfo`, `equippedAch`, and any additional fields known by the response schema.
+The API returns JSON only. A successful `/player-info` or `/info` response is the complete upstream player payload itself, without a status, `data` wrapper, normalization, renaming, or duplication. Available fields are never dropped; only null-like placeholders are removed. Only the `Dev` developer credit is retained as the final key. This includes sections such as `basicInfo`, `profileInfo`, `clanBasicInfo`, `captainBasicInfo`, `petInfo`, `socialInfo`, `diamondCostRes`, `creditScoreInfo`, `news`, `historyEpInfo`, `equippedAch`, and any additional fields known by the response schema.
 
 For a player who belongs to a guild, the game server may return the guild identity in `clanBasicInfo` and the owner/captain profile in `captainBasicInfo`. If a field is not returned by the upstream service for a UID, this API does not fabricate it.
 
@@ -255,31 +255,15 @@ List of `{seasonId, gameMode, info}` objects showing occupation roles per season
 
 ```json
 {
-  "status": "success",
-  "api_version": "3.0.0",
-  "timestamp": "2025-01-01T00:00:00+00:00",
-  "cached": false,
-  "credits": {
-    "author": "Infinity Codex",
-    "developer": "https://t.me/zerox6t9"
-  },
-  "data": {
-    "basic": { "uid": "2769409057", "nickname": "PlayerName", "level": 75, ... },
-    "appearance": { ... },
-    "avatar": { ... },
-    "rank": { "brRank": 7, "brRankingPoints": 3200, ... },
-    "social": { "bio": "Hello World", "liked": 152, ... },
-    "guild": { "clanName": "MyGuild", "memberNum": 46, ... },
-    "pet": { "name": "Dreki", "level": 7, ... },
-    "elitePass": [ ... ],
-    "creditScore": { "creditScore": 100, ... },
-    "membership": { "hasElitePass": true, ... },
-    "achievements": [ ... ],
-    "recentNews": [ ... ],
-    "preferences": { ... },
-    "occupations": [ ... ],
-    "championship": { ... }
-  }
+  "basicInfo": { "accountId": "1704140050", "nickname": "PlayerName", "level": 75, "...": "all fields returned by the game" },
+  "profileInfo": { "...": "all fields returned by the game" },
+  "clanBasicInfo": { "...": "all fields returned by the game" },
+  "captainBasicInfo": { "...": "all fields returned by the game" },
+  "petInfo": { "...": "all fields returned by the game" },
+  "socialInfo": { "...": "all fields returned by the game" },
+  "diamondCostRes": { "...": "all fields returned by the game" },
+  "creditScoreInfo": { "...": "all fields returned by the game" },
+  "Dev": "@MT_0G"
 }
 ```
 
