@@ -716,7 +716,7 @@ CREDITS = {
     "developer": "https://t.me/zerox6t9",
 }
 
-DEVELOPER_CREDIT = "@MT_0G"
+DEVELOPER_CREDIT = "@InfinitySFX"
 
 
 def _with_developer_credit(data: Dict[str, Any]) -> Dict[str, Any]:
